@@ -31,6 +31,6 @@ func (h *DiscardHandler) WithGroup(_ string) slog.Handler {
 }
 
 func (h *DiscardHandler) Enabled(_ context.Context, _ slog.Level) bool {
-	// Всегда возвращает false, так как запись журнала игнорируется
+	// Взвращает false, так как запись журнала игнорируется
 	return false
 }

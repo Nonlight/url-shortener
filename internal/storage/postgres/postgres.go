@@ -14,7 +14,7 @@ type Storage struct {
 	db *pgxpool.Pool
 }
 
-func NewPGX(storagePath string) (*Storage, error) {
+func New(storagePath string) (*Storage, error) {
 	const op = "storage.postgres.New"
 
 	db, err := pgxpool.New(context.Background(), storagePath)
@@ -23,10 +23,10 @@ func NewPGX(storagePath string) (*Storage, error) {
 	}
 	_, err = db.Exec(context.Background(),
 		`CREATE TABLE IF NOT EXISTS url(
-    id INTEGER PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     alias TEXT NOT NULL UNIQUE,
     url TEXT NOT NULL ,
-    created_at TIMESTAMP DEFAULT now(),
+    created_at TIMESTAMP DEFAULT now()
 );
 	CREATE INDEX IF NOT EXISTS idx_alias ON url(alias);
 	`)
@@ -46,8 +46,8 @@ func (s *Storage) SaveURL(urlToSave string, alias string) (int64, error) {
 		`INSERT INTO url(alias, url) VALUES ($1, $2)
 ON CONFLICT (alias) DO UPDATE SET url = EXCLUDED.url
 RETURNING id;`,
-		urlToSave,
 		alias,
+		urlToSave,
 	).Scan(&id)
 
 	if err != nil {
@@ -86,4 +86,9 @@ func (s *Storage) DeleteURL(alias string) (int64, error) {
 	rows := res.RowsAffected()
 
 	return rows, nil
+}
+
+func (s *Storage) Close() error {
+	s.db.Close()
+	return nil
 }

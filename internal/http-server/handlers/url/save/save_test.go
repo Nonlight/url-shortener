@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"url-shortener/internal/http-server/handlers/url/save"
 	"url-shortener/internal/http-server/handlers/url/save/mocks"
 	"url-shortener/internal/lib/logger/handlers/slogdiscard"
 )
@@ -60,7 +59,8 @@ func TestSaveHandler(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+			t.Setenv("ALIAS_LENGTH", "5")
+			//t.Parallel()
 
 			urlSaverMock := mocks.NewURLSaver(t)
 
@@ -69,7 +69,7 @@ func TestSaveHandler(t *testing.T) {
 					Return(int64(1), tc.mockError).
 					Once()
 			}
-			handler := save.New(slogdiscard.NewDiscardLogger(), urlSaverMock)
+			handler := New(slogdiscard.NewDiscardLogger(), urlSaverMock)
 
 			input := fmt.Sprintf(`{"url": "%s", "alias": "%s"}`, tc.url, tc.alias)
 
@@ -83,13 +83,11 @@ func TestSaveHandler(t *testing.T) {
 
 			body := rr.Body.String()
 
-			var resp save.Response
+			var resp Response
 
 			require.NoError(t, json.Unmarshal([]byte(body), &resp))
 
 			require.Equal(t, tc.respError, resp.Error)
-
-			// TODO: add more checks
 		})
 	}
 }

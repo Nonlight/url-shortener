@@ -11,7 +11,7 @@ import (
 
 type Config struct {
 	Env         string `yaml:"env" env-default:"local"`
-	StoragePath string `yaml:"storage_path" env-required:"true"`
+	DatabaseURL string `yaml:"database_url" env:"DATABASE_URL"`
 	HTTPServer  `yaml:"http_server"`
 	Author      `yaml:"auth"`
 }
@@ -45,6 +45,25 @@ func MustLoad() *Config {
 
 	if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
 		log.Fatalf("Error reading config: %v", err)
+	}
+
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		cfg.DatabaseURL = dbURL
+		log.Printf("using DATABASE_URL: %s", cfg.DatabaseURL)
+	}
+
+	if user := os.Getenv("AUTH_USER"); user != "" {
+		cfg.Author.User = user
+		log.Println("Using AUTH_USER from environment")
+	}
+
+	if password := os.Getenv("AUTH_PASSWORD"); password != "" {
+		cfg.Author.Password = password
+		log.Println("Using AUTH_PASSWORD from environment")
+	}
+
+	if cfg.Author.User == "" || cfg.Author.Password == "" {
+		log.Fatal("Username and Password is empty")
 	}
 
 	return &cfg
