@@ -8,6 +8,7 @@ import (
 	"url-shortener/internal/http-server/handlers/redirect"
 	delete2 "url-shortener/internal/http-server/handlers/url/delete"
 	"url-shortener/internal/http-server/handlers/url/save"
+	"url-shortener/internal/http-server/handlers/url/update"
 	"url-shortener/internal/http-server/middleware/logger"
 	"url-shortener/internal/lib/logger/handlers/slogpretty"
 	"url-shortener/internal/lib/logger/sl"
@@ -52,6 +53,7 @@ func main() {
 
 		r.Post("/", save.New(log, storage))
 		r.Delete("/{alias}", delete2.New(log, storage))
+		r.Put("/", update.New(log, storage))
 	})
 
 	router.Get("/{alias}", redirect.New(log, storage))

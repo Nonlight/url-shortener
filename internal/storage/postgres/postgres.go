@@ -7,6 +7,7 @@ import (
 	"url-shortener/internal/storage"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -44,13 +45,16 @@ func (s *Storage) SaveURL(urlToSave string, alias string) (int64, error) {
 	var id int64
 	err := s.db.QueryRow(context.Background(),
 		`INSERT INTO url(alias, url) VALUES ($1, $2)
-ON CONFLICT (alias) DO UPDATE SET url = EXCLUDED.url
 RETURNING id;`,
 		alias,
 		urlToSave,
 	).Scan(&id)
 
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return 0, storage.ErrURLExists
+		}
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -73,18 +77,32 @@ func (s *Storage) GetURL(alias string) (string, error) {
 }
 
 func (s *Storage) DeleteURL(alias string) (int64, error) {
-	const op = "storage.postgres.DeliteURL"
+	const op = "storage.postgres.DeleteURL"
 
 	res, err := s.db.Exec(context.Background(), "DELETE FROM url WHERE alias = $1", alias)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, storage.ErrURLNotFound
-		}
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
 	rows := res.RowsAffected()
+	if rows == 0 {
+		return 0, storage.ErrURLNotFound
+	}
 
+	return rows, nil
+}
+
+func (s *Storage) UpdateURL(alias, newURL string) (int64, error) {
+	const op = "storage.postgres.UpdateURL"
+
+	res, err := s.db.Exec(context.Background(), "UPDATE url SET url = $1 WHERE alias = $2", newURL, alias)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+	rows := res.RowsAffected()
+	if rows == 0 {
+		return 0, storage.ErrURLNotFound
+	}
 	return rows, nil
 }
 
