@@ -21,25 +21,25 @@ const (
 	host = "localhost:8082"
 )
 
-func getAuth(typeField string) string {
-	// Загружаем .env файл
+func TestMain(m *testing.M) {
 	if err := godotenv.Load("../.env"); err != nil {
 		panic("Error loading .env file: " + err.Error())
 	}
 
-	// Получаем credentials из переменных окружения
+	os.Exit(m.Run())
+}
+
+func getAuth(typeField string) string {
 	authUser := os.Getenv("AUTH_USER")
 	authPassword := os.Getenv("AUTH_PASSWORD")
 
 	if authUser == "" || authPassword == "" {
 		panic("AUTH_USER and AUTH_PASSWORD must be set in .env file")
 	}
-
 	if typeField == "user" {
 		return authUser
 	}
 	return authPassword
-
 }
 
 func TestURLShortener_HappyPath(t *testing.T) {
@@ -56,33 +56,37 @@ func TestURLShortener_HappyPath(t *testing.T) {
 		}).
 		WithBasicAuth(getAuth("user"), getAuth("password")).
 		Expect().
-		Status(200).
+		Status(201).
 		JSON().Object().
 		ContainsKey("alias")
 }
 
 func TestURLShortener_SaveRedirectRemove(t *testing.T) {
 	testCases := []struct {
-		name  string
-		url   string
-		alias string
-		error string
+		name   string
+		url    string
+		alias  string
+		error  string
+		status int
 	}{
 		{
-			name:  "Valid URL",
-			url:   gofakeit.URL(),
-			alias: gofakeit.Word() + gofakeit.Word(),
+			name:   "Valid URL",
+			url:    gofakeit.URL(),
+			alias:  gofakeit.Word() + gofakeit.Word(),
+			status: http.StatusCreated,
 		},
 		{
-			name:  "Invalid URL",
-			url:   "invalid_url",
-			alias: gofakeit.Word(),
-			error: "field URL is not a valid URL",
+			name:   "Invalid URL",
+			url:    "invalid_url",
+			alias:  gofakeit.Word(),
+			error:  "invalid url",
+			status: http.StatusBadRequest,
 		},
 		{
-			name:  "Empty Alias",
-			url:   gofakeit.URL(),
-			alias: "",
+			name:   "Empty Alias",
+			url:    gofakeit.URL(),
+			alias:  "",
+			status: http.StatusCreated,
 		},
 	}
 
@@ -95,14 +99,13 @@ func TestURLShortener_SaveRedirectRemove(t *testing.T) {
 
 			e := httpexpect.Default(t, u.String())
 
-			// Save
 			resp := e.POST("/url").
 				WithJSON(save.Request{
 					URL:   tc.url,
 					Alias: tc.alias,
 				}).
 				WithBasicAuth(getAuth("user"), getAuth("password")).
-				Expect().Status(http.StatusOK).
+				Expect().Status(tc.status).
 				JSON().Object()
 
 			if tc.error != "" {
@@ -123,10 +126,8 @@ func TestURLShortener_SaveRedirectRemove(t *testing.T) {
 				alias = resp.Value("alias").String().Raw()
 			}
 
-			// Redirect
 			testRedirect(t, alias, tc.url)
 
-			// Remove
 			reqDel := e.DELETE("/"+path.Join("url", alias)).
 				WithBasicAuth(getAuth("user"), getAuth("password")).
 				Expect().Status(http.StatusOK).

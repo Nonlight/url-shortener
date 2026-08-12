@@ -22,11 +22,12 @@ type Response struct {
 	CountUpdated int64 `json:"countUpdated"`
 }
 
-type UpdateURL interface {
+//go:generate go run github.com/vektra/mockery/v2@v2.53.6 --name=URLUpdater
+type URLUpdater interface {
 	UpdateURL(alias, newURL string) (int64, error)
 }
 
-func New(log *slog.Logger, updateURL UpdateURL) http.HandlerFunc {
+func New(log *slog.Logger, updateURL URLUpdater) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const fn = "handlers.url.update.New"
 

@@ -17,11 +17,12 @@ type Response struct {
 	CountDeleted int64 `json:"countDeleted"`
 }
 
-type DeleteURL interface {
+//go:generate go run github.com/vektra/mockery/v2@v2.53.6 --name=URLDeleter
+type URLDeleter interface {
 	DeleteURL(alias string) (int64, error)
 }
 
-func New(log *slog.Logger, deleteURL DeleteURL) http.HandlerFunc {
+func New(log *slog.Logger, deleteURL URLDeleter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const fn = "handlers.url.delete.New"
 

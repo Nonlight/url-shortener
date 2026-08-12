@@ -1,4 +1,4 @@
-package save
+package update
 
 import (
 	"bytes"
@@ -6,63 +6,61 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"url-shortener/internal/http-server/handlers/url/update/mocks"
+	"url-shortener/internal/lib/logger/handlers/slogdiscard"
 	urlservice "url-shortener/internal/service/url"
 
 	"github.com/stretchr/testify/require"
-
-	"url-shortener/internal/http-server/handlers/url/save/mocks"
-	"url-shortener/internal/lib/logger/handlers/slogdiscard"
 )
 
-func TestSave_Success(t *testing.T) {
-	urlSaverMock := mocks.NewURLSaver(t)
+func TestUpdate_Success(t *testing.T) {
+	urlUpdaterMock := mocks.NewURLUpdater(t)
 
-	urlSaverMock.
-		On("SaveURL", "https://google.com", "test_alias").
-		Return("test_alias", nil).
+	urlUpdaterMock.
+		On("UpdateURL", "test_alias", "https://yandex.com").
+		Return(int64(1), nil).
 		Once()
 
 	handler := New(
 		slogdiscard.NewDiscardLogger(),
-		urlSaverMock,
+		urlUpdaterMock,
 	)
 
 	input := `{
-		"url": "https://google.com",
+		"url": "https://yandex.com",
 		"alias": "test_alias"
 	}`
 
 	req := httptest.NewRequest(
-		http.MethodPost,
+		http.MethodPut,
 		"/url",
 		bytes.NewBufferString(input),
 	)
-
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	require.Equal(t, http.StatusCreated, rr.Code)
+	require.Equal(t, http.StatusOK, rr.Code)
 
 	var resp Response
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-	require.Equal(t, "test_alias", resp.Alias)
-	urlSaverMock.AssertExpectations(t)
+	require.Equal(t, int64(1), resp.CountUpdated)
+	urlUpdaterMock.AssertExpectations(t)
 }
 
-func TestSave_BadRequest(t *testing.T) {
-	urlSaverMock := mocks.NewURLSaver(t)
+func TestUpdate_BadRequest(t *testing.T) {
+	urlUpdaterMock := mocks.NewURLUpdater(t)
 
 	handler := New(
 		slogdiscard.NewDiscardLogger(),
-		urlSaverMock,
+		urlUpdaterMock,
 	)
 
 	input := `{
-		"url": "https://google.com",
+		"url": "https://yandex.com",
 		"alias": "test_alias"
 	`
 
 	req := httptest.NewRequest(
-		http.MethodPost,
+		http.MethodPut,
 		"/url",
 		bytes.NewBufferString(input),
 	)
@@ -74,39 +72,40 @@ func TestSave_BadRequest(t *testing.T) {
 	var resp Response
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 	require.Equal(t, "failed to decode request body", resp.Error)
-	urlSaverMock.AssertExpectations(t)
+
+	urlUpdaterMock.AssertExpectations(t)
 }
 
-func TestSave_Conflict(t *testing.T) {
-	urlSaverMock := mocks.NewURLSaver(t)
-
-	urlSaverMock.
-		On("SaveURL", "https://google.com", "test_alias").
-		Return("", urlservice.ErrURLExists).
+func TestUpdate_NotFound(t *testing.T) {
+	urlUpdaterMock := mocks.NewURLUpdater(t)
+	urlUpdaterMock.
+		On("UpdateURL", "test_alias", "https://yandex.com").
+		Return(int64(0), urlservice.ErrURLNotFound).
 		Once()
 
 	handler := New(
 		slogdiscard.NewDiscardLogger(),
-		urlSaverMock,
+		urlUpdaterMock,
 	)
 
 	input := `{
-		"url": "https://google.com",
+		"url": "https://yandex.com",
 		"alias": "test_alias"
 	}`
 
 	req := httptest.NewRequest(
-		http.MethodPost,
+		http.MethodPut,
 		"/url",
 		bytes.NewBufferString(input),
 	)
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	require.Equal(t, http.StatusConflict, rr.Code)
+	require.Equal(t, http.StatusNotFound, rr.Code)
 
 	var resp Response
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-	require.Equal(t, "url already exists", resp.Error)
-	urlSaverMock.AssertExpectations(t)
+	require.Equal(t, "url not found", resp.Error)
+	urlUpdaterMock.AssertExpectations(t)
+
 }

@@ -1,52 +1,66 @@
 package redirect
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"url-shortener/internal/http-server/handlers/redirect/mocks"
 	"url-shortener/internal/lib/api"
 	"url-shortener/internal/lib/logger/handlers/slogdiscard"
+	urlservice "url-shortener/internal/service/url"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestRedirectHandler(t *testing.T) {
-	cases := []struct {
-		name      string
-		alias     string
-		url       string
-		respError string
-		mockError error
-	}{
-		{
-			name:  "Success",
-			alias: "test_alias",
-			url:   "https://www.google.com/",
-		},
-	}
+func TestRedirect_Success(t *testing.T) {
+	urlGetterMock := mocks.NewURLGetter(t)
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			urlGetterMock := mocks.NewURLGetter(t)
+	urlGetterMock.
+		On("GetURL", "test_alias").
+		Return("https://www.google.com/", nil).
+		Once()
 
-			if tc.respError == "" || tc.mockError != nil {
-				urlGetterMock.On("GetURL", tc.alias).
-					Return(tc.url, tc.mockError).Once()
-			}
+	r := chi.NewRouter()
+	r.Get("/{alias}", New(
+		slogdiscard.NewDiscardLogger(),
+		urlGetterMock,
+	))
 
-			r := chi.NewRouter()
-			r.Get("/{alias}", New(slogdiscard.NewDiscardLogger(), urlGetterMock))
+	ts := httptest.NewServer(r)
+	defer ts.Close()
 
-			ts := httptest.NewServer(r)
-			defer ts.Close()
+	redirectedToURL, err := api.GetRedirect(ts.URL + "/test_alias")
+	require.NoError(t, err)
 
-			redirectedToURL, err := api.GetRedirect(ts.URL + "/" + tc.alias)
-			require.NoError(t, err)
+	require.Equal(
+		t,
+		"https://www.google.com/",
+		redirectedToURL,
+	)
 
-			assert.Equal(t, tc.url, redirectedToURL)
-			urlGetterMock.AssertExpectations(t) // Проверка вызова мока
-		})
-	}
+	urlGetterMock.AssertExpectations(t)
+}
+
+func TestRedirect_NotFound(t *testing.T) {
+	urlGetterMock := mocks.NewURLGetter(t)
+
+	urlGetterMock.
+		On("GetURL", "test_alias").
+		Return("", urlservice.ErrURLNotFound).
+		Once()
+	router := chi.NewRouter()
+	router.Get("/{alias}", New(
+		slogdiscard.NewDiscardLogger(),
+		urlGetterMock,
+	))
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/test_alias",
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	urlGetterMock.AssertExpectations(t)
 }
