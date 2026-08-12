@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	resp "url-shortener/internal/lib/api/response"
-	"url-shortener/internal/storage"
+	urlservice "url-shortener/internal/service/url"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -18,7 +18,7 @@ type Response struct {
 }
 
 type DeleteURL interface {
-	DeleteURL(urlToDelete string) (int64, error)
+	DeleteURL(alias string) (int64, error)
 }
 
 func New(log *slog.Logger, deleteURL DeleteURL) http.HandlerFunc {
@@ -38,14 +38,14 @@ func New(log *slog.Logger, deleteURL DeleteURL) http.HandlerFunc {
 		}
 
 		countDeleted, err := deleteURL.DeleteURL(alias)
-		if errors.Is(err, storage.ErrURLNotFound) {
-			log.Info("url not found", "alias", alias)
-			render.JSON(w, r, resp.Error("internal error"))
+		if errors.Is(err, urlservice.ErrURLNotFound) {
+			render.JSON(w, r, resp.Error("url not found"))
 			return
 		}
+
 		if err != nil {
-			log.Error("failed to get url", "alias", alias)
-			render.JSON(w, r, resp.Error("failed to get url"))
+			log.Error("failed to delete url", slog.String("alias", alias))
+			render.JSON(w, r, resp.Error("failed to delete url"))
 			return
 		}
 

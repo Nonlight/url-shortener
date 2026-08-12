@@ -6,12 +6,13 @@ import (
 	"os"
 	"url-shortener/internal/config"
 	"url-shortener/internal/http-server/handlers/redirect"
-	delete2 "url-shortener/internal/http-server/handlers/url/delete"
+	"url-shortener/internal/http-server/handlers/url/delete"
 	"url-shortener/internal/http-server/handlers/url/save"
 	"url-shortener/internal/http-server/handlers/url/update"
 	"url-shortener/internal/http-server/middleware/logger"
 	"url-shortener/internal/lib/logger/handlers/slogpretty"
 	"url-shortener/internal/lib/logger/sl"
+	urlservice "url-shortener/internal/service/url"
 	"url-shortener/internal/storage/postgres"
 
 	"github.com/go-chi/chi/v5"
@@ -36,8 +37,9 @@ func main() {
 		log.Error("failed to init storage", sl.Err(err))
 		os.Exit(1)
 	}
-
 	defer storage.Close()
+
+	urlService := urlservice.NewService(storage, 5)
 
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
@@ -51,14 +53,14 @@ func main() {
 			cfg.Author.User: cfg.Author.Password,
 		}))
 
-		r.Post("/", save.New(log, storage))
-		r.Delete("/{alias}", delete2.New(log, storage))
-		r.Put("/", update.New(log, storage))
+		r.Post("/", save.New(log, urlService))
+		r.Delete("/{alias}", delete.New(log, urlService))
+		r.Put("/", update.New(log, urlService))
 	})
 
-	router.Get("/{alias}", redirect.New(log, storage))
+	router.Get("/{alias}", redirect.New(log, urlService))
 
-	log.Info("starting server", slog.String("adress", cfg.Address))
+	log.Info("starting server", slog.String("address", cfg.Address))
 
 	srv := &http.Server{
 		Addr:         cfg.Address,
@@ -72,9 +74,8 @@ func main() {
 		log.Error("failed to start server", sl.Err(err))
 
 	}
-	log.Error("stopping server", slog.String("adress", cfg.Address))
+	log.Error("stopping server", slog.String("address", cfg.Address))
 
-	// 	TODO: run server: run server
 }
 
 func setUpLogger(env string) *slog.Logger {

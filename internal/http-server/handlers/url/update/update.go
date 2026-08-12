@@ -6,25 +6,24 @@ import (
 	"net/http"
 	resp "url-shortener/internal/lib/api/response"
 	"url-shortener/internal/lib/logger/sl"
-	"url-shortener/internal/storage"
+	urlservice "url-shortener/internal/service/url"
 
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
-	"github.com/go-playground/validator/v10"
 )
 
 type Request struct {
-	NewURL string `json:"url" validate:"required,url"`
+	NewURL string `json:"url"`
 	Alias  string `json:"alias,omitempty"`
 }
 
 type Response struct {
 	resp.Response
-	CountUpdated int64 `json:"counteUpdate"`
+	CountUpdated int64 `json:"countUpdated"`
 }
 
 type UpdateURL interface {
-	UpdateURL(urlToUpdate string, newURL string) (int64, error)
+	UpdateURL(alias, newURL string) (int64, error)
 }
 
 func New(log *slog.Logger, updateURL UpdateURL) http.HandlerFunc {
@@ -43,32 +42,26 @@ func New(log *slog.Logger, updateURL UpdateURL) http.HandlerFunc {
 			render.JSON(w, r, resp.Error("failed to decode request body"))
 			return
 		}
-
 		log.Info("request body", slog.Any("url", req))
 
-		if err := validator.New().Struct(req); err != nil {
-			validationErrors := err.(validator.ValidationErrors)
-			log.Error("invalid request", sl.Err(validationErrors))
-			render.JSON(w, r, resp.ValidationError(validationErrors))
+		countUpdated, err := updateURL.UpdateURL(req.Alias, req.NewURL)
+		if errors.Is(err, urlservice.ErrInvalidURL) {
+			render.JSON(w, r, resp.Error("invalid url"))
+			log.Info("invalid url", slog.String("url", req.NewURL))
 			return
 		}
-
-		alias := req.Alias
-		newURL := req.NewURL
-
-		countUpdated, err := updateURL.UpdateURL(alias, newURL)
-		if errors.Is(err, storage.ErrURLNotFound) {
+		if errors.Is(err, urlservice.ErrURLNotFound) {
 			render.JSON(w, r, resp.Error("url not found"))
-			log.Info("url not found", "alias", alias)
+			log.Info("url not found", slog.String("alias", req.Alias))
 			return
 		}
 		if err != nil {
-			log.Error("failed to update url", "alias", alias, sl.Err(err))
+			log.Error("failed to update url", slog.String("alias", req.Alias), sl.Err(err))
 			render.JSON(w, r, resp.Error("failed to update url"))
 			return
 		}
 
-		log.Info("url updated", "alias", alias, "countUpdated", countUpdated)
+		log.Info("url updated", "alias", req.Alias, "countUpdated", countUpdated)
 
 		responseOK(w, r, countUpdated)
 

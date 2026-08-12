@@ -4,20 +4,16 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"os"
-	"strconv"
 	resp "url-shortener/internal/lib/api/response"
 	"url-shortener/internal/lib/logger/sl"
-	"url-shortener/internal/lib/random"
-	"url-shortener/internal/storage"
+	urlservice "url-shortener/internal/service/url"
 
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
-	"github.com/go-playground/validator/v10"
 )
 
 type Request struct {
-	URL   string `json:"url" validate:"required,url"`
+	URL   string `json:"url"`
 	Alias string `json:"alias,omitempty"`
 }
 type Response struct {
@@ -27,12 +23,12 @@ type Response struct {
 
 //go:generate go run github.com/vektra/mockery/v2@v2.53.6 --name=URLSaver
 type URLSaver interface {
-	SaveURL(urlToSave string, alias string) (int64, error)
+	SaveURL(urlToSave string, alias string) (string, error)
 }
 
 func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		const fn = "handlers.url.New"
+		const fn = "handlers.url.save.New"
 
 		log = log.With(
 			slog.String("fn", fn),
@@ -47,34 +43,19 @@ func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
 
 			render.JSON(w, r, resp.Error("failed to decode request body"))
 
-			// Завершаем обработку запроса
 			return
 		}
 
 		log.Info("request body decoded", slog.Any("request", req))
 
-		if err := validator.New().Struct(req); err != nil {
-			validateErr := err.(validator.ValidationErrors)
-			log.Error("invalid request", sl.Err(err))
-			render.JSON(w, r, resp.ValidationError(validateErr))
+		alias, err := urlSaver.SaveURL(req.URL, req.Alias)
+		if errors.Is(err, urlservice.ErrInvalidURL) {
+			log.Info("invalid url", sl.Err(err))
+			render.JSON(w, r, resp.Error("invalid url"))
 			return
 		}
 
-		alias := req.Alias
-		if alias == "" {
-			aliasLengthStr := os.Getenv("ALIAS_LENGTH")
-			aliasLength, err := strconv.Atoi(aliasLengthStr)
-
-			if err != nil {
-				log.Error("failed to parse ALIAS_LENGTH", sl.Err(err))
-				render.JSON(w, r, resp.Error("failed to parse ALIAS_LENGTH"))
-				return
-			}
-			alias = random.NewRandomString(aliasLength)
-		}
-
-		id, err := urlSaver.SaveURL(req.URL, alias)
-		if errors.Is(err, storage.ErrURLExists) {
+		if errors.Is(err, urlservice.ErrURLExists) {
 			log.Info("url already exists", slog.String("url", req.URL))
 			render.JSON(w, r, resp.Error("url already exists"))
 			return
@@ -86,7 +67,7 @@ func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
 			return
 		}
 
-		log.Info("url added", slog.Int64("id", id))
+		log.Info("url added", slog.String("alias", alias))
 
 		responseOK(w, r, alias)
 	}

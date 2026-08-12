@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	resp "url-shortener/internal/lib/api/response"
-	"url-shortener/internal/storage"
+	urlservice "url-shortener/internal/service/url"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -34,9 +34,9 @@ func New(log *slog.Logger, urlGetter URLGetter) http.HandlerFunc {
 		}
 
 		url, err := urlGetter.GetURL(alias)
-		if errors.Is(err, storage.ErrURLNotFound) {
-			log.Info("url not found", "alias", alias)
-			render.JSON(w, r, resp.Error("internal error"))
+		if errors.Is(err, urlservice.ErrURLNotFound) {
+			log.Info("url not found", slog.String("alias", alias))
+			render.JSON(w, r, resp.Error("url not found"))
 			return
 		}
 		if err != nil {
@@ -46,8 +46,7 @@ func New(log *slog.Logger, urlGetter URLGetter) http.HandlerFunc {
 		}
 
 		log.Info("got url", slog.String("url", url))
-
-		// redirect to the url
+		
 		http.Redirect(w, r, url, http.StatusFound)
 	}
 }
