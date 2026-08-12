@@ -39,6 +39,7 @@ func New(log *slog.Logger, updateURL UpdateURL) http.HandlerFunc {
 		err := render.DecodeJSON(r.Body, &req)
 		if err != nil {
 			log.Error("failed to decode request body", sl.Err(err))
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("failed to decode request body"))
 			return
 		}
@@ -46,17 +47,20 @@ func New(log *slog.Logger, updateURL UpdateURL) http.HandlerFunc {
 
 		countUpdated, err := updateURL.UpdateURL(req.Alias, req.NewURL)
 		if errors.Is(err, urlservice.ErrInvalidURL) {
-			render.JSON(w, r, resp.Error("invalid url"))
 			log.Info("invalid url", slog.String("url", req.NewURL))
+			render.Status(r, http.StatusBadRequest)
+			render.JSON(w, r, resp.Error("invalid url"))
 			return
 		}
 		if errors.Is(err, urlservice.ErrURLNotFound) {
-			render.JSON(w, r, resp.Error("url not found"))
 			log.Info("url not found", slog.String("alias", req.Alias))
+			render.Status(r, http.StatusNotFound)
+			render.JSON(w, r, resp.Error("url not found"))
 			return
 		}
 		if err != nil {
 			log.Error("failed to update url", slog.String("alias", req.Alias), sl.Err(err))
+			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("failed to update url"))
 			return
 		}
@@ -69,6 +73,7 @@ func New(log *slog.Logger, updateURL UpdateURL) http.HandlerFunc {
 }
 
 func responseOK(w http.ResponseWriter, r *http.Request, countUpdated int64) {
+	render.Status(r, http.StatusOK)
 	render.JSON(w, r, Response{
 		Response:     resp.OK(),
 		CountUpdated: countUpdated,

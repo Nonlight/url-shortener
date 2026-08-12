@@ -33,18 +33,22 @@ func New(log *slog.Logger, deleteURL DeleteURL) http.HandlerFunc {
 		alias := chi.URLParam(r, "alias")
 		if alias == "" {
 			log.Error("empty alias")
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("invalid request"))
 			return
 		}
 
 		countDeleted, err := deleteURL.DeleteURL(alias)
 		if errors.Is(err, urlservice.ErrURLNotFound) {
+			log.Info("url not found", slog.String("alias", alias))
+			render.Status(r, http.StatusNotFound)
 			render.JSON(w, r, resp.Error("url not found"))
 			return
 		}
 
 		if err != nil {
 			log.Error("failed to delete url", slog.String("alias", alias))
+			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("failed to delete url"))
 			return
 		}
@@ -57,6 +61,7 @@ func New(log *slog.Logger, deleteURL DeleteURL) http.HandlerFunc {
 }
 
 func responseOK(w http.ResponseWriter, r *http.Request, countDeleted int64) {
+	render.Status(r, http.StatusOK)
 	render.JSON(w, r, Response{
 		Response:     resp.OK(),
 		CountDeleted: countDeleted,
