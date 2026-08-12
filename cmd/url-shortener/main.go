@@ -39,7 +39,7 @@ func main() {
 	}
 	defer storage.Close()
 
-	urlService := urlservice.NewService(storage, 5)
+	urlService := urlservice.NewService(storage, cfg.AliasLength)
 
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)

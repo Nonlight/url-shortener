@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Env         string `yaml:"env" env-default:"local"`
 	DatabaseURL string `yaml:"database_url" env:"DATABASE_URL"`
+	AliasLength int    `env:"ALIAS_LENGTH" env-default:"5"`
 	HTTPServer  `yaml:"http_server"`
 	Author      `yaml:"auth"`
 }
@@ -46,10 +47,13 @@ func MustLoad() *Config {
 	if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
 		log.Fatalf("Error reading config: %v", err)
 	}
+	if cfg.AliasLength <= 0 {
+		log.Fatal("ALIAS_LENGTH must be greater than 0")
+	}
 
 	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
 		cfg.DatabaseURL = dbURL
-		log.Printf("using DATABASE_URL: %s", cfg.DatabaseURL)
+		log.Printf("Using DATABASE_URL from environment")
 	}
 
 	if user := os.Getenv("AUTH_USER"); user != "" {
